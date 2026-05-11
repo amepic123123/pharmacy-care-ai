@@ -2,6 +2,7 @@ import { AlertTriangle, Calendar, ChevronDown, Bell, ShieldAlert, Pill, X, Clock
 import { useState, useMemo, useEffect } from "react";
 import { useRouterState, useNavigate } from "@tanstack/react-router";
 import { usePatients } from "@/contexts/PatientContext";
+import { fetchNotifications, type TopBarNotification } from "@/lib/api";
 
 export function TopBar() {
   const [showAlerts, setShowAlerts] = useState(false);
@@ -46,24 +47,13 @@ export function TopBar() {
       .filter((p): p is typeof patients[0] => !!p);
   }, [recentIds, patientId, patients]);
 
-  const notifications = useMemo(() => {
-    if (patient.id === "1") {
-      return [
-        { type: "critical", msg: "Potassium levels rising (5.8 mEq/L)", time: "2m ago" },
-        { type: "critical", msg: "Contraindicated: Metformin + Contrast", time: "15m ago" },
-        { type: "warning", msg: "Lisinopril dosage review required", time: "1h ago" },
-      ];
+  // API-fetched notifications with mock fallback
+  const [notifications, setNotifications] = useState<TopBarNotification[]>([]);
+
+  useEffect(() => {
+    if (patient) {
+      fetchNotifications(patient.id, patient.name).then(setNotifications);
     }
-    if (patient.id === "2") {
-      return [
-        { type: "critical", msg: "Recent AFib episode detected", time: "5m ago" },
-        { type: "warning", msg: "INR check required", time: "30m ago" },
-      ];
-    }
-    return [
-      { type: "critical", msg: `New clinical event for ${patient.name}`, time: "10m ago" },
-      { type: "warning", msg: "Medication review due", time: "2h ago" },
-    ];
   }, [patient]);
 
   const handleAlertClick = () => {

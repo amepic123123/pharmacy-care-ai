@@ -1,6 +1,11 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState, useMemo, useEffect } from "react";
 import { usePatients } from "@/contexts/PatientContext";
+import { 
+  fetchDrugAlerts, fetchLabs, fetchVitals, fetchTrends, fetchVisitHistory,
+  resolveAlertApi, unresolveAlertApi,
+  type DrugAlert, type LabResult, type VitalsSummary, type TrendDataPoint, type VisitEntry
+} from "@/lib/api";
 import {
   AlertTriangle,
   ChevronLeft,
@@ -28,17 +33,6 @@ export const Route = createFileRoute("/patient/$patientId")({
   component: PatientPage,
 });
 
-const labs = [
-  { name: "eGFR", value: "28", unit: "mL/min/1.73m²", tone: "critical" },
-  { name: "ALT", value: "142", unit: "U/L", tone: "warning" },
-  { name: "AST", value: "118", unit: "U/L", tone: "warning" },
-  { name: "Total Bilirubin", value: "1.1", unit: "mg/dL", tone: "success" },
-  { name: "Creatinine", value: "3.4", unit: "mg/dL", tone: "critical" },
-  { name: "Potassium", value: "5.8", unit: "mEq/L", tone: "critical" },
-  { name: "INR", value: "1.9", unit: "0.9 – 1.1 normal", tone: "warning" },
-  { name: "Hemoglobin", value: "9.2", unit: "g/dL", tone: "warning" },
-];
-
 const toneText: Record<string, string> = {
   critical: "text-critical",
   warning: "text-warning",
@@ -49,33 +43,6 @@ const toneDot: Record<string, string> = {
   warning: "bg-warning",
   success: "bg-success",
 };
-
-const drugAlerts = [
-  {
-    severity: "critical",
-    title: "Contraindicated Drug Combination",
-    drugs: ["Metformin 1000mg", "Contrast Dye (Iohexol)"],
-    why: "This patient's severely reduced kidney function (eGFR 28) means their body cannot eliminate metformin fast enough. Combining it with contrast dye — used in the scheduled CT scan — dramatically increases the risk of lactic acidosis, a rare but life-threatening buildup of lactic acid in the blood.",
-    rec: "Hold metformin 48 hours before the procedure and restart only after kidney function is re-checked and confirmed stable.",
-    open: true,
-  },
-  {
-    severity: "critical",
-    title: "Dangerous Bleeding Risk",
-    drugs: ["Warfarin 5mg", "Ibuprofen 400mg"],
-    why: "Concurrent use significantly increases gastrointestinal bleeding risk in elderly patients on chronic anticoagulation.",
-    rec: "Discontinue ibuprofen. Use acetaminophen for pain control and reassess INR within 48 hours.",
-    open: false,
-  },
-  {
-    severity: "warning",
-    title: "Elevated Potassium Level",
-    drugs: ["Lisinopril 20mg", "Spironolactone 25mg"],
-    why: "Potassium is high (5.8 mEq/L). Monitor closely and review medications.",
-    rec: "Reduce ACE inhibitor dose, recheck potassium in 24h.",
-    open: false,
-  },
-];
 
 function PatientPage() {
   const { patientId } = Route.useParams();
@@ -88,6 +55,32 @@ function PatientPage() {
   const [highlightMode, setHighlightMode] = useState(false);
   const [highlights, setHighlights] = useState<Set<string>>(new Set());
 
+  // API-fetched data with mock fallback
+  const [labs, setLabs] = useState<LabResult[]>([]);
+  const [drugAlerts, setDrugAlerts] = useState<DrugAlert[]>([]);
+  const [vitals, setVitals] = useState<VitalsSummary>({ bloodPressure: "—/—", heartRate: "— bpm" });
+  const [trends, setTrends] = useState<TrendDataPoint[]>([]);
+  const [visitHistory, setVisitHistory] = useState<VisitEntry[]>([]);
+
+  const patient = useMemo(() => {
+    return patients.find(p => p.id === patientId) || patients[0];
+  }, [patients, patientId]);
+
+  // Fetch all patient-specific data when patientId changes
+  useEffect(() => {
+    fetchLabs(patientId).then(setLabs);
+    fetchDrugAlerts(patientId).then(setDrugAlerts);
+    fetchVitals(patientId).then(setVitals);
+    fetchTrends(patientId).then(setTrends);
+  }, [patientId]);
+
+  // Visit history depends on the patient object
+  useEffect(() => {
+    if (patient) {
+      fetchVisitHistory(patientId, patient).then(setVisitHistory);
+    }
+  }, [patientId, patient]);
+
   const toggleHighlight = (id: string) => {
     if (!highlightMode) return;
     setHighlights((prev) => {
@@ -99,10 +92,6 @@ function PatientPage() {
   };
 
   const isHighlighted = (id: string) => highlights.has(id);
-  
-  const patient = useMemo(() => {
-    return patients.find(p => p.id === patientId) || patients[0];
-  }, [patients, patientId]);
 
   return (
     <div className="p-5 space-y-4 max-w-[1700px] mx-auto">
@@ -373,7 +362,7 @@ function PatientPage() {
           {/* Tabs */}
           <div className="flex items-center gap-6 border-b border-border">
             {[
-              { id: "alerts", label: "Drug Alerts", badge: 3 },
+              { id: "alerts", label: "Drug Alerts", badge: drugAlerts.length || undefined },
               { id: "metrics", label: "Patient Metrics" },
               { id: "history", label: "Medication History" },
               { id: "log", label: "History" },
@@ -420,18 +409,16 @@ function PatientPage() {
                     <TrendingUp className="size-4 text-critical" />
                   </div>
                   <div className="h-48 bg-muted/20 rounded flex items-end justify-between p-4 gap-2">
-                    {[35, 32, 28, 26, 28].map((v, i) => (
-                      <div key={i} className="flex-1 bg-primary/20 rounded-t relative group" style={{ height: `${v * 2}px` }}>
-                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition">{v}</div>
+                    {trends.map((t, i) => (
+                      <div key={i} className="flex-1 bg-primary/20 rounded-t relative group" style={{ height: `${t.value * 2}px` }}>
+                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition">{t.value}</div>
                       </div>
                     ))}
                   </div>
                   <div className="flex justify-between text-[10px] text-muted-foreground mt-2">
-                    <span>May 06</span>
-                    <span>May 07</span>
-                    <span>May 08</span>
-                    <span>May 09</span>
-                    <span>Today</span>
+                    {trends.map((t, i) => (
+                      <span key={i}>{t.label}</span>
+                    ))}
                   </div>
                 </div>
                 <div className="rounded-xl border border-border bg-card p-5">
@@ -439,11 +426,11 @@ function PatientPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-3 bg-surface rounded-lg border border-border">
                       <div className="text-[10px] text-muted-foreground uppercase">Blood Pressure</div>
-                      <div className="text-lg font-bold">138/82</div>
+                      <div className="text-lg font-bold">{vitals.bloodPressure}</div>
                     </div>
                     <div className="p-3 bg-surface rounded-lg border border-border">
                       <div className="text-[10px] text-muted-foreground uppercase">Heart Rate</div>
-                      <div className="text-lg font-bold">88 <span className="text-xs font-normal">bpm</span></div>
+                      <div className="text-lg font-bold">{vitals.heartRate}</div>
                     </div>
                   </div>
                 </div>
@@ -469,11 +456,7 @@ function PatientPage() {
 
             {tab === "log" && (
               <div className="space-y-4 p-2 animate-in fade-in slide-in-from-right-4">
-                {[
-                  { date: patient.lastVisit, event: "Last Clinical Encounter", detail: `Follow-up visit regarding ${patient.diagnosis}.` },
-                  { date: "12 Apr 2026", event: "Routine Review", detail: "General health screening and medication reconciliation." },
-                  { date: "05 Jan 2026", event: "Historical Entry", detail: "Initial baseline assessment performed." },
-                ].map((item, i) => (
+                {visitHistory.map((item, i) => (
                   <div key={i} className="relative pl-6 border-l-2 border-border">
                     <div className="absolute left-[-5px] top-1.5 size-2 rounded-full bg-primary" />
                     <div className="text-[10px] text-muted-foreground font-bold uppercase">{item.date}</div>
@@ -495,7 +478,7 @@ function DrugAlertCard({
   onResolve, 
   onUnresolve 
 }: { 
-  alert: typeof drugAlerts[number], 
+  alert: DrugAlert, 
   patientId: string,
   onResolve: () => void,
   onUnresolve: () => void

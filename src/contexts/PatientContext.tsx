@@ -1,24 +1,44 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { mockPatients as initialPatients, Patient } from "@/lib/mock-data";
+import { fetchPatients } from "@/lib/api";
 
 interface PatientContextType {
   patients: Patient[];
+  isLoading: boolean;
+  isBackendConnected: boolean;
   resolveAlert: (patientId: string) => void;
   unresolveAlert: (patientId: string) => void;
+  addPatient: (patient: Patient) => void;
+  refetch: () => void;
 }
 
 const PatientContext = createContext<PatientContextType | undefined>(undefined);
 
 export function PatientProvider({ children }: { children: React.ReactNode }) {
-  const [patients, setPatients] = useState<Patient[]>(() => {
-    if (typeof window === "undefined") return initialPatients;
-    const saved = localStorage.getItem("smartpharm_patients");
-    return saved ? JSON.parse(saved) : initialPatients;
-  });
+  const [patients, setPatients] = useState<Patient[]>(initialPatients);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isBackendConnected, setIsBackendConnected] = useState(false);
+
+  const loadPatients = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await fetchPatients();
+      // If we got data and it's different from the initial mock, the backend is connected
+      const fromBackend = data !== initialPatients && data.length > 0;
+      setIsBackendConnected(fromBackend);
+      setPatients(data);
+    } catch {
+      console.warn("[PatientContext] Failed to load patients, using mock data");
+      setPatients(initialPatients);
+      setIsBackendConnected(false);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem("smartpharm_patients", JSON.stringify(patients));
-  }, [patients]);
+    loadPatients();
+  }, [loadPatients]);
 
   const resolveAlert = useCallback((patientId: string) => {
     setPatients(prev => prev.map(p => 
@@ -36,8 +56,12 @@ export function PatientProvider({ children }: { children: React.ReactNode }) {
     ));
   }, []);
 
+  const addPatient = useCallback((patient: Patient) => {
+    setPatients(prev => [patient, ...prev]);
+  }, []);
+
   return (
-    <PatientContext.Provider value={{ patients, resolveAlert, unresolveAlert }}>
+    <PatientContext.Provider value={{ patients, isLoading, isBackendConnected, resolveAlert, unresolveAlert, addPatient, refetch: loadPatients }}>
       {children}
     </PatientContext.Provider>
   );

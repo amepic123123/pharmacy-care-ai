@@ -1,5 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState, useEffect } from "react";
 import { usePatients } from "@/contexts/PatientContext";
+import {
+  fetchDashboardAlerts, fetchInsights, fetchActivity,
+  type DashboardAlert, type InsightItem, type ActivityItem
+} from "@/lib/api";
+import { NewReviewModal } from "@/components/NewReviewModal";
 import {
   Activity,
   AlertTriangle,
@@ -17,9 +23,10 @@ import {
   Users,
 } from "lucide-react";
 
-export const Route = createFileRoute("/")({
-  component: Dashboard,
-});
+export const Route = createFileRoute("/")(
+  {
+    component: Dashboard,
+  });
 
 const toneMap: Record<string, string> = {
   critical: "text-critical bg-critical-soft",
@@ -29,81 +36,49 @@ const toneMap: Record<string, string> = {
   primary: "text-primary bg-primary/10",
 };
 
-const alerts = [
-  {
-    severity: "critical",
-    title: "Contraindicated Drug Combination",
-    patient: "Margaret R. Collins",
-    detail: "Metformin + Contrast Dye — eGFR 28",
-    time: "2m ago",
-  },
-  {
-    severity: "critical",
-    title: "Dangerous Bleeding Risk",
-    patient: "James O. Mendez",
-    detail: "Warfarin + Ibuprofen co-administration",
-    time: "14m ago",
-  },
-  {
-    severity: "warning",
-    title: "Elevated Potassium Level",
-    patient: "Margaret R. Collins",
-    detail: "K+ 5.8 mEq/L — review ACE inhibitor dose",
-    time: "31m ago",
-  },
-  {
-    severity: "warning",
-    title: "Renal Dose Adjustment Needed",
-    patient: "Aisha Patel",
-    detail: "Vancomycin trough 24 µg/mL",
-    time: "1h ago",
-  },
-];
-
-const insights = [
-  "12 patients on metformin require eGFR re-check this week.",
-  "3 cardiology patients show INR drift — consider warfarin clinic referral.",
-  "New evidence: SGLT2 inhibitors recommended for CKD Stage 3 with diabetes.",
-];
-
-const activity = [
-  { who: "Dr. A. Chen", what: "Signed override for Margaret R. Collins", when: "14:28" },
-  { who: "Pharm. K. Liu", what: "Verified vancomycin dose for Aisha Patel", when: "13:55" },
-  { who: "AI Assistant", what: "Flagged 4 new interactions in morning rounds", when: "08:12" },
-  { who: "Dr. M. Okafor", what: "Updated care plan for James O. Mendez", when: "Yesterday" },
-];
-
 function Dashboard() {
   const { patients } = usePatients();
+  const [alerts, setAlerts] = useState<DashboardAlert[]>([]);
+  const [insights, setInsights] = useState<InsightItem[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [showReviewModal, setShowReviewModal] = useState(false);
+
+  useEffect(() => {
+    fetchDashboardAlerts().then(setAlerts);
+    fetchInsights().then(setInsights);
+    fetchActivity().then(setActivity);
+  }, []);
+
+  const totalAlerts = patients.reduce((acc, p) => acc + p.alerts, 0);
 
   const metrics = [
-    { 
-      label: "Active Patients", 
-      value: "248", 
-      change: "+12", 
-      icon: Users, 
-      tone: "primary" 
+    {
+      label: "Active Patients",
+      value: "248",
+      change: "+12",
+      icon: Users,
+      tone: "primary"
     },
-    { 
-      label: "Critical Alerts", 
-      value: patients.reduce((acc, p) => acc + p.alerts, 0).toString(), 
-      change: "-3 today", 
-      icon: ShieldAlert, 
-      tone: "critical" 
+    {
+      label: "Critical Alerts",
+      value: totalAlerts.toString(),
+      change: "-3 today",
+      icon: ShieldAlert,
+      tone: "critical"
     },
-    { 
-      label: "AI Reviews Today", 
-      value: "1,284", 
-      change: "98.7% accuracy", 
-      icon: Brain, 
-      tone: "success" 
+    {
+      label: "AI Reviews Today",
+      value: "1,284",
+      change: "98.7% accuracy",
+      icon: Brain,
+      tone: "success"
     },
-    { 
-      label: "Avg. Review Time", 
-      value: "2.3m", 
-      change: "-18% vs last week", 
-      icon: Activity, 
-      tone: "primary" 
+    {
+      label: "Avg. Review Time",
+      value: "2.3m",
+      change: "-18% vs last week",
+      icon: Activity,
+      tone: "primary"
     },
   ];
 
@@ -115,28 +90,33 @@ function Dashboard() {
           <div className="text-xs uppercase tracking-wider text-muted-foreground">Command center</div>
           <h1 className="text-2xl font-semibold mt-1">Good afternoon, Dr. Chen</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {patients.reduce((acc, p) => acc + p.alerts, 0)} critical alerts across 248 active patients · AI reviewed 1,284 orders today
+            {totalAlerts} critical alerts across 248 active patients · AI reviewed 1,284 orders today
           </p>
         </div>
         <div className="flex gap-2">
           <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-elevated border border-border text-sm hover:bg-accent transition">
             <FileSearch className="size-4" /> Search records
           </button>
-          <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition">
+          <button
+            onClick={() => setShowReviewModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition"
+          >
             <Plus className="size-4" /> New review
           </button>
         </div>
       </div>
 
+      {showReviewModal && <NewReviewModal onClose={() => setShowReviewModal(false)} />}
+
       {/* Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {metrics.map((m) => {
           const isPatients = m.label === "Active Patients";
-          
+
           return (
-            <Link 
-              key={m.label} 
-              to={isPatients ? "/patient" : "/"} 
+            <Link
+              key={m.label}
+              to={isPatients ? "/patient" : "/"}
               className="rounded-xl border border-border bg-card p-5 hover:bg-accent/40 transition-colors group cursor-pointer"
             >
               <div className="flex items-start justify-between">
@@ -173,7 +153,8 @@ function Dashboard() {
               <Link
                 key={p.id}
                 to="/patient/$patientId"
-                params={{ patientId: p.id }} 
+                params={{ patientId: p.id }}
+                search={{ tab: p.alerts > 0 ? "alerts" : "overview" }}
                 className="flex items-center gap-4 px-5 py-3.5 hover:bg-accent/40 transition group"
               >
                 <div className="size-9 rounded-full bg-accent flex items-center justify-center text-xs font-semibold text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
@@ -191,13 +172,12 @@ function Dashboard() {
                   </span>
                 )}
                 <span
-                  className={`text-[10px] font-bold px-2 py-1 rounded-md ${
-                    p.risk === "HIGH"
+                  className={`text-[10px] font-bold px-2 py-1 rounded-md ${p.risk === "HIGH"
                       ? "bg-critical-soft text-critical"
                       : p.risk === "MED"
-                      ? "bg-warning-soft text-warning"
-                      : "bg-success-soft text-success"
-                  }`}
+                        ? "bg-warning-soft text-warning"
+                        : "bg-success-soft text-success"
+                    }`}
                 >
                   {p.risk} RISK
                 </span>
@@ -216,53 +196,44 @@ function Dashboard() {
             <span className="text-xs text-muted-foreground">Live</span>
           </div>
           <div className="p-3 space-y-2">
-            {alerts.map((a, i) => {
-              // Find patient ID based on name for navigation
-              const pIndex = patients.findIndex(p => p.name === a.patient);
-              const pId = (pIndex !== -1 ? pIndex + 1 : 1).toString();
-              
-              return (
-                <Link
-                  key={i}
-                  to="/patient/$patientId"
-                  params={{ patientId: pId }}
-                  search={{ tab: "alerts" }}
-                  className={`block rounded-lg border p-3.5 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer ${
-                    a.severity === "critical"
-                      ? "border-critical-soft bg-critical-soft hover:bg-critical/10"
-                      : "border-warning-soft bg-warning-soft hover:bg-warning/10"
+            {alerts.map((a, i) => (
+              <Link
+                key={i}
+                to="/patient/$patientId"
+                params={{ patientId: a.patientId }}
+                search={{ tab: "alerts" }}
+                className={`block rounded-lg border p-3.5 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer ${a.severity === "critical"
+                    ? "border-critical-soft bg-critical-soft hover:bg-critical/10"
+                    : "border-warning-soft bg-warning-soft hover:bg-warning/10"
                   }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={`size-7 shrink-0 rounded-md flex items-center justify-center ${
-                        a.severity === "critical"
-                          ? "bg-critical text-critical-foreground"
-                          : "bg-warning text-warning-foreground"
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`size-7 shrink-0 rounded-md flex items-center justify-center ${a.severity === "critical"
+                        ? "bg-critical text-critical-foreground"
+                        : "bg-warning text-warning-foreground"
                       }`}
-                    >
-                      <AlertTriangle className="size-3.5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <span
-                          className={`text-[10px] font-bold uppercase tracking-wide ${
-                            a.severity === "critical" ? "text-critical" : "text-warning"
+                  >
+                    <AlertTriangle className="size-3.5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span
+                        className={`text-[10px] font-bold uppercase tracking-wide ${a.severity === "critical" ? "text-critical" : "text-warning"
                           }`}
-                        >
-                          {a.severity}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">{a.time}</span>
-                      </div>
-                      <div className="text-sm font-medium mt-1">{a.title}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {a.patient} — {a.detail}
-                      </div>
+                      >
+                        {a.severity}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground">{a.time}</span>
+                    </div>
+                    <div className="text-sm font-medium mt-1">{a.title}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {a.patientName} — {a.detail}
                     </div>
                   </div>
-                </Link>
-              );
-            })}
+                </div>
+              </Link>
+            ))}
           </div>
         </div>
 
@@ -281,7 +252,7 @@ function Dashboard() {
             {insights.map((s, i) => (
               <li key={i} className="flex items-start gap-3 text-sm">
                 <CheckCircle2 className="size-4 mt-0.5 text-primary shrink-0" />
-                <span className="text-foreground/90">{s}</span>
+                <span className="text-foreground/90">{s.text}</span>
               </li>
             ))}
           </ul>

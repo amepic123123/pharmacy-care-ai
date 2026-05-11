@@ -20,7 +20,9 @@
 11. [Patient Visit History / Timeline](#11-patient-visit-history--timeline)
 12. [User / Clinician Identity](#12-user--clinician-identity)
 13. [Session & State Management](#13-session--state-management)
-14. [Suggested API Endpoints](#14-suggested-api-endpoints)
+14. [PDF Upload / New Clinical Review](#14-pdf-upload--new-clinical-review)
+15. [Frontend API Layer Architecture](#15-frontend-api-layer-architecture)
+16. [Complete API Endpoint Reference](#16-complete-api-endpoint-reference)
 
 ---
 
@@ -105,16 +107,23 @@ interface DrugAlert {
 }
 ```
 
-### Current Mock Data (3 alerts, hardcoded for all patients)
+### Current Mock Data (per-patient alerts in `api.ts`)
 
-| # | Severity | Title | Drugs Involved |
-|---|---|---|---|
-| 1 | critical | Contraindicated Drug Combination | Metformin 1000mg, Contrast Dye (Iohexol) |
-| 2 | critical | Dangerous Bleeding Risk | Warfarin 5mg, Ibuprofen 400mg |
-| 3 | warning | Elevated Potassium Level | Lisinopril 20mg, Spironolactone 25mg |
+Alerts are now **patient-specific** in the mock fallback layer. Patient 1 has 3 alerts, Patient 2 has 1, Patient 3 has 3, Patient 5 has 1.
 
-> [!WARNING]
-> These alerts are currently **static and shared across all patients**. The backend must return **patient-specific** alerts based on their actual medication profile and lab results.
+| # | Patient | Severity | Title | Drugs Involved |
+|---|---|---|---|---|
+| da-1 | 1 | critical | Contraindicated Drug Combination | Metformin 1000mg, Contrast Dye (Iohexol) |
+| da-2 | 1 | critical | Dangerous Bleeding Risk | Warfarin 5mg, Ibuprofen 400mg |
+| da-3 | 1 | warning | Elevated Potassium Level | Lisinopril 20mg, Spironolactone 25mg |
+| da-4 | 2 | critical | Recent AFib Episode Detected | Apixaban 5mg, Aspirin 81mg |
+| da-5 | 3 | critical | Immunosuppression Risk | Cyclophosphamide 100mg, Tamoxifen 20mg |
+| da-6 | 3 | warning | Hepatotoxicity Monitoring Required | Tamoxifen 20mg |
+| da-7 | 3 | warning | Thromboembolic Risk | Tamoxifen 20mg |
+| da-8 | 5 | warning | Thyroid-Metformin Interaction | Levothyroxine 75mcg, Metformin 500mg |
+
+> [!NOTE]
+> Alerts are now fetched via `fetchDrugAlerts(patientId)` from `api.ts`. The mock fallback provides per-patient data. The backend should generate these dynamically from medication profiles.
 
 ### Backend replacement
 
@@ -516,30 +525,141 @@ The greeting time-of-day logic (`"Good afternoon"`) should be computed on the fr
 **Source file:** [PatientContext.tsx](file:///c:/Users/USER/Desktop/aipharmacy-front/src/contexts/PatientContext.tsx)
 **Also:** [TopBar.tsx](file:///c:/Users/USER/Desktop/aipharmacy-front/src/components/TopBar.tsx#L14-L17) — `localStorage("recent_patients")`
 
-### Current Implementation
+### Current Implementation (✅ Updated)
 
-| Storage Key | Purpose | Current Backend |
+The `PatientContext` now:
+1. Calls `fetchPatients()` from `api.ts` on mount (tries backend, falls back to mock)
+2. Exposes `isBackendConnected` flag to indicate data source
+3. Provides `addPatient(patient)` for the PDF upload flow
+4. Provides `resolveAlert` / `unresolveAlert` for in-memory alert mutations
+
+| Storage Key | Purpose | Status |
 |---|---|---|
-| `smartpharm_patients` | Full patient array with mutated alert counts | localStorage (no backend) |
-| `recent_patients` | Array of patient IDs for open TopBar tabs | localStorage (no backend) |
+| `recent_patients` | Array of patient IDs for open TopBar tabs | localStorage (UI-only, keep as-is) |
 
-### What must change
+### What still needs backend work
 
-The `PatientContext` currently:
-1. Loads the full patient list from `localStorage` (fallback: hardcoded mock)
-2. Mutates alert counts in-memory when alerts are resolved
-3. Persists back to `localStorage`
-
-This entire flow should be replaced with:
-- **Fetch patients** from `GET /api/patients` on mount
-- **Resolve alerts** via `POST /api/patients/:id/drug-alerts/:alertId/resolve`
-- **Session tabs** can remain in `localStorage` (purely a UI preference) or be synced via `PUT /api/users/me/preferences`
+- **Alert resolution** should call `POST /api/patients/:id/drug-alerts/:alertId/resolve` (currently local-only)
+- **`addPatient`** currently only adds to local state; with a real backend the upload endpoint returns the patient and the context should refetch
 
 ---
 
-## 14. Suggested API Endpoints
+## 14. PDF Upload / New Clinical Review
 
-Here is the complete list of endpoints the backend needs to implement:
+**Source files:**
+- [api.ts](file:///c:/Users/USER/Desktop/aipharmacy-front/src/lib/api.ts) — `uploadPatientPDF()` function
+- [NewReviewModal.tsx](file:///c:/Users/USER/Desktop/aipharmacy-front/src/components/NewReviewModal.tsx) — Upload UI component
+- [index.tsx](file:///c:/Users/USER/Desktop/aipharmacy-front/src/routes/index.tsx) — "New Review" button trigger
+
+### Feature Description
+
+The "New Review" button on the dashboard opens a modal where clinicians can upload a patient PDF. The file is sent to the backend for AI-powered extraction. The backend should:
+
+1. Accept the PDF via multipart form upload
+2. Run OCR / text extraction
+3. Parse patient demographics, lab results, and medication lists
+4. Run drug interaction analysis
+5. Return a structured `Patient` record + extraction summary
+
+### Upload Request Schema
+
+```
+POST /api/patients/upload
+Content-Type: multipart/form-data
+
+Body: { file: <PDF binary> }
+```
+
+### Upload Response Schema
+
+```typescript
+interface UploadResult {
+  patient: Patient;             // Full Patient object (same schema as section 1)
+  extractedData: {
+    labsFound: number;          // Count of lab results extracted
+    medicationsFound: number;   // Count of medications identified
+    alertsGenerated: number;    // Count of drug interaction alerts created
+    documentPages: number;      // Total pages in the uploaded PDF
+  };
+}
+```
+
+### Current Mock Behavior
+
+When the backend is unavailable, the frontend simulates:
+- Upload progress (0–50%) with 200ms intervals
+- AI processing progress (50–90%) with 300ms intervals
+- Generates a mock patient from the PDF filename
+- Returns randomized extraction metrics
+
+> [!IMPORTANT]
+> The upload endpoint is the **most critical** new backend feature. It is the primary data ingestion pathway for the application. The frontend expects XHR progress events during upload, so the backend should support chunked transfer or standard multipart progress.
+
+### Frontend Processing Steps (displayed to user)
+
+| Step | Threshold | Description |
+|---|---|---|
+| 1 | 0% | Uploading document |
+| 2 | 25% | Extracting text via OCR |
+| 3 | 45% | Identifying patient demographics |
+| 4 | 60% | Parsing lab results & medications |
+| 5 | 75% | Running AI drug interaction analysis |
+| 6 | 90% | Generating clinical alerts |
+
+---
+
+## 15. Frontend API Layer Architecture
+
+**Source file:** [api.ts](file:///c:/Users/USER/Desktop/aipharmacy-front/src/lib/api.ts)
+
+> [!NOTE]
+> All data fetching now goes through a centralized API client (`src/lib/api.ts`). Every function follows the **backend-first, mock-fallback** pattern. No component imports `mock-data.ts` directly.
+
+### Configuration
+
+```typescript
+const API_BASE = import.meta.env.VITE_API_URL || "/api";
+```
+
+Set `VITE_API_URL` in `.env` to point to your backend. Defaults to `/api` (same-origin proxy).
+
+### Pattern
+
+```typescript
+export async function fetchSomething(): Promise<Data> {
+  try {
+    return await apiFetch<Data>("/endpoint");  // tries backend
+  } catch {
+    console.warn("[API] failed — using mock data");
+    return mockFallbackData;                   // falls back silently
+  }
+}
+```
+
+### All Fetch Functions
+
+| Function | Endpoint | Fallback Source |
+|---|---|---|
+| `fetchPatients()` | `GET /patients` | `mockPatients` from mock-data.ts |
+| `fetchPatientById(id)` | `GET /patients/:id` | `mockPatients.find()` |
+| `fetchDrugAlerts(patientId)` | `GET /patients/:id/drug-alerts` | Per-patient mock map in api.ts |
+| `resolveAlertApi(patientId, alertId)` | `POST /patients/:id/drug-alerts/:alertId/resolve` | No-op (local state handles it) |
+| `unresolveAlertApi(patientId, alertId)` | `POST /patients/:id/drug-alerts/:alertId/unresolve` | No-op |
+| `fetchLabs(patientId)` | `GET /patients/:id/labs` | Per-patient mock map in api.ts |
+| `fetchDashboardMetrics(count)` | `GET /dashboard/metrics` | Hardcoded mock metrics |
+| `fetchDashboardAlerts()` | `GET /alerts/recent?limit=10` | 4 mock alerts |
+| `fetchInsights()` | `GET /insights` | 3 mock insight strings |
+| `fetchActivity()` | `GET /activity?limit=20` | 4 mock activity entries |
+| `fetchVitals(patientId)` | `GET /patients/:id/vitals/current` | Per-patient mock vitals |
+| `fetchTrends(patientId)` | `GET /patients/:id/vitals/trends` | Per-patient mock trend data |
+| `fetchVisitHistory(patientId, patient)` | `GET /patients/:id/encounters` | 3 mock visit entries |
+| `fetchCurrentUser()` | `GET /auth/me` | Hardcoded Dr. A. Chen |
+| `fetchNotifications(patientId, name)` | `GET /patients/:id/notifications` | Per-patient mock notifications |
+| `uploadPatientPDF(file, onProgress)` | `POST /patients/upload` | Simulated upload with mock patient |
+
+---
+
+## 16. Complete API Endpoint Reference
 
 ### Core Resources
 
@@ -548,6 +668,7 @@ GET    /api/auth/me
 GET    /api/patients
 GET    /api/patients?search=&risk=&dept=&page=&limit=
 GET    /api/patients/:id
+POST   /api/patients/upload              ← NEW (multipart/form-data)
 ```
 
 ### Patient Clinical Data
@@ -564,6 +685,7 @@ GET    /api/patients/:id/medications
 GET    /api/patients/:id/encounters
 GET    /api/patients/:id/documents
 GET    /api/patients/:id/documents/:docId
+GET    /api/patients/:id/notifications
 ```
 
 ### Dashboard Aggregates
@@ -584,18 +706,18 @@ PUT    /api/users/me/preferences
 
 ---
 
-## Files That Need Modification
+## Files Reference
 
-When the backend is ready, these files need to be updated:
-
-| File | What to change |
-|---|---|
-| [mock-data.ts](file:///c:/Users/USER/Desktop/aipharmacy-front/src/lib/mock-data.ts) | **Delete entirely** — replaced by API calls |
-| [PatientContext.tsx](file:///c:/Users/USER/Desktop/aipharmacy-front/src/contexts/PatientContext.tsx) | Replace `localStorage` init with `useQuery` / `fetch` calls to `/api/patients` |
-| [index.tsx](file:///c:/Users/USER/Desktop/aipharmacy-front/src/routes/index.tsx) | Replace `alerts`, `insights`, `activity` constants with API data; make all metrics dynamic |
-| [patient.$patientId.tsx](file:///c:/Users/USER/Desktop/aipharmacy-front/src/routes/patient.$patientId.tsx) | Replace `labs`, `drugAlerts` constants with per-patient API calls; replace document content with real document renderer |
-| [TopBar.tsx](file:///c:/Users/USER/Desktop/aipharmacy-front/src/components/TopBar.tsx) | Replace `notifications` useMemo with API call; make user identity dynamic |
-| [patient.index.tsx](file:///c:/Users/USER/Desktop/aipharmacy-front/src/routes/patient.index.tsx) | Already uses context — will work once context fetches from API |
+| File | Role | Status |
+|---|---|---|
+| [api.ts](file:///c:/Users/USER/Desktop/aipharmacy-front/src/lib/api.ts) | **Central API client** — all fetch functions with mock fallback | ✅ Complete |
+| [mock-data.ts](file:///c:/Users/USER/Desktop/aipharmacy-front/src/lib/mock-data.ts) | Patient interface + seed data (used only as fallback) | ✅ Fallback only |
+| [PatientContext.tsx](file:///c:/Users/USER/Desktop/aipharmacy-front/src/contexts/PatientContext.tsx) | Global state — fetches from API on mount, exposes `addPatient` | ✅ API-connected |
+| [NewReviewModal.tsx](file:///c:/Users/USER/Desktop/aipharmacy-front/src/components/NewReviewModal.tsx) | PDF upload modal with drag-drop + progress UI | ✅ Complete |
+| [index.tsx](file:///c:/Users/USER/Desktop/aipharmacy-front/src/routes/index.tsx) | Dashboard — fetches alerts, insights, activity from API | ✅ API-connected |
+| [patient.$patientId.tsx](file:///c:/Users/USER/Desktop/aipharmacy-front/src/routes/patient.$patientId.tsx) | Patient detail — fetches labs, alerts, vitals, trends, history from API | ✅ API-connected |
+| [TopBar.tsx](file:///c:/Users/USER/Desktop/aipharmacy-front/src/components/TopBar.tsx) | TopBar — fetches notifications from API | ✅ API-connected |
+| [patient.index.tsx](file:///c:/Users/USER/Desktop/aipharmacy-front/src/routes/patient.index.tsx) | Patient directory — consumes PatientContext (auto-works) | ✅ API-connected |
 
 > [!TIP]
-> The project already has `@tanstack/react-query` installed and configured in `__root.tsx`. Use `useQuery` / `useMutation` hooks to replace all mock data with API calls. The `queryClient` is already available via route context.
+> The project has `@tanstack/react-query` installed and configured in `__root.tsx`. When the backend is live, consider migrating from `useState`/`useEffect` to `useQuery`/`useMutation` hooks for better caching, refetching, and error handling.
