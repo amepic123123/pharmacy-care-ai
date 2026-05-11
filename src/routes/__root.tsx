@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import appCss from "../styles.css?url";
 import { AppSidebar } from "@/components/AppSidebar";
 import { TopBar } from "@/components/TopBar";
+import { PatientProvider } from "@/contexts/PatientContext";
 
 function NotFoundComponent() {
   return (
@@ -69,15 +70,17 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   return (
     <QueryClientProvider client={queryClient}>
-      <div className="flex h-screen w-full overflow-hidden bg-background">
-        <AppSidebar />
-        <div className="flex-1 flex flex-col min-w-0">
-          <TopBar />
-          <main className="flex-1 overflow-y-auto">
-            <Outlet />
-          </main>
+      <PatientProvider>
+        <div className="flex h-screen w-full overflow-hidden bg-background">
+          <AppSidebar />
+          <div className="flex-1 flex flex-col min-w-0">
+            <TopBar />
+            <main className="flex-1 overflow-y-auto">
+              <Outlet />
+            </main>
+          </div>
         </div>
-      </div>
+      </PatientProvider>
     </QueryClientProvider>
   );
 }

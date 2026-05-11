@@ -1,12 +1,14 @@
 import { AlertTriangle, Calendar, ChevronDown, Bell, ShieldAlert, Pill, X, Clock } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { useRouterState, useNavigate } from "@tanstack/react-router";
-import { mockPatients } from "@/lib/mock-data";
+import { usePatients } from "@/contexts/PatientContext";
 
 export function TopBar() {
   const [showAlerts, setShowAlerts] = useState(false);
   const navigate = useNavigate();
   const routerState = useRouterState();
+
+  const { patients } = usePatients();
 
   // Track recently viewed patients
   const [recentIds, setRecentIds] = useState<string[]>(() => {
@@ -33,16 +35,16 @@ export function TopBar() {
   }, [patientId]);
 
   const patient = useMemo(() => {
-    return mockPatients.find(p => p.id === patientId) || mockPatients[0];
-  }, [patientId]);
+    return patients.find(p => p.id === patientId) || patients[0];
+  }, [patients, patientId]);
 
   const recentPatients = useMemo(() => {
     // Show recent ones excluding the current one
     return recentIds
       .filter(id => id !== patientId)
-      .map(id => mockPatients.find(p => p.id === id))
-      .filter((p): p is typeof mockPatients[0] => !!p);
-  }, [recentIds, patientId]);
+      .map(id => patients.find(p => p.id === id))
+      .filter((p): p is typeof patients[0] => !!p);
+  }, [recentIds, patientId, patients]);
 
   const notifications = useMemo(() => {
     if (patient.id === "1") {
@@ -94,11 +96,11 @@ export function TopBar() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const filteredPatients = useMemo(() => {
-    return mockPatients.filter(p => 
+    return patients.filter(p => 
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.mrn.includes(searchQuery)
     ).slice(0, 5);
-  }, [searchQuery]);
+  }, [searchQuery, patients]);
 
   const handleOpenPatient = (id: string) => {
     handleSwitchPatient(id);
@@ -117,18 +119,18 @@ export function TopBar() {
         ) : (
           <div className="flex items-end h-full pt-2 gap-1">
             {recentIds.map((id) => {
-              const p = mockPatients.find(mp => mp.id === id);
+              const p = patients.find(mp => mp.id === id);
               if (!p) return null;
               const isActive = patientId === id;
-
+              
               return (
                 <button
                   key={id}
                   onClick={() => handleSwitchPatient(id)}
                   className={`group relative flex items-center gap-3 px-4 h-[46px] rounded-t-xl border-t border-x transition-all min-w-[160px] max-w-[240px] truncate ${isActive
-                      ? "bg-surface border-border text-foreground shadow-[0_-4px_12px_-4px_rgba(0,0,0,0.05)]"
-                      : "bg-transparent border-transparent text-muted-foreground hover:bg-surface/40"
-                    }`}
+                    ? "bg-surface border-border text-foreground shadow-[0_-4px_12px_-4px_rgba(0,0,0,0.05)]"
+                    : "bg-transparent border-transparent text-muted-foreground hover:bg-surface/40"
+                  }`}
                 >
                   <div className={`size-6 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0 ${isActive ? "bg-primary text-primary-foreground" : "bg-muted"
                     }`}>
@@ -160,13 +162,13 @@ export function TopBar() {
               onClick={() => setShowAlerts(!showAlerts)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-critical-soft text-critical text-xs font-bold hover:bg-critical hover:text-critical-foreground transition-all"
             >
-              <ShieldAlert className="size-3.5" /> 2 Critical
+              <ShieldAlert className="size-3.5" /> {patient.alerts} Critical
             </button>
             <button
               onClick={() => setShowAlerts(!showAlerts)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-warning-soft text-warning text-xs font-bold hover:bg-warning hover:text-warning-foreground transition-all"
             >
-              <AlertTriangle className="size-3.5" /> 1 Warning
+              <AlertTriangle className="size-3.5" /> 0 Warning
             </button>
           </div>
         )}

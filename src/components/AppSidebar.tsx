@@ -2,26 +2,12 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Users,
-  Pill,
-  Bell,
-  FileText,
-  History,
-  BarChart3,
-  Activity,
-  Settings,
   FlaskConical,
 } from "lucide-react";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Patients", url: "/patient", icon: Users },
-  { title: "Prescriptions", url: "/prescriptions", icon: Pill },
-  { title: "Alerts", url: "/alerts", icon: Bell, badge: 3 },
-  { title: "Documents", url: "/documents", icon: FileText },
-  { title: "Medication History", url: "/history", icon: History },
-  { title: "Reports", url: "/reports", icon: BarChart3 },
-  { title: "Activity Logs", url: "/activity", icon: Activity },
-  { title: "Settings", url: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {

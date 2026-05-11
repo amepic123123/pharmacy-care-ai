@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { usePatients } from "@/contexts/PatientContext";
 import {
   Activity,
   AlertTriangle,
@@ -20,27 +21,13 @@ export const Route = createFileRoute("/")({
   component: Dashboard,
 });
 
-const metrics = [
-  { label: "Active Patients", value: "248", change: "+12", icon: Users, tone: "info" },
-  { label: "Critical Alerts", value: "7", change: "+3 today", icon: ShieldAlert, tone: "critical" },
-  { label: "AI Reviews Today", value: "1,284", change: "98.7% accuracy", icon: Brain, tone: "success" },
-  { label: "Avg. Review Time", value: "2.3m", change: "-18% vs last week", icon: TrendingUp, tone: "info" },
-];
-
 const toneMap: Record<string, string> = {
   critical: "text-critical bg-critical-soft",
   warning: "text-warning bg-warning-soft",
   success: "text-success bg-success-soft",
   info: "text-info bg-info-soft",
+  primary: "text-primary bg-primary/10",
 };
-
-const patients = [
-  { name: "Margaret R. Collins", mrn: "847201", dept: "Nephrology", risk: "HIGH", alerts: 2, age: "78Y" },
-  { name: "James O. Mendez", mrn: "847188", dept: "Cardiology", risk: "MED", alerts: 1, age: "64Y" },
-  { name: "Aisha Patel", mrn: "847150", dept: "Oncology", risk: "HIGH", alerts: 3, age: "52Y" },
-  { name: "Robert Hayashi", mrn: "847102", dept: "Internal Med", risk: "LOW", alerts: 0, age: "71Y" },
-  { name: "Elena Costa", mrn: "847011", dept: "Endocrinology", risk: "MED", alerts: 1, age: "45Y" },
-];
 
 const alerts = [
   {
@@ -87,6 +74,39 @@ const activity = [
 ];
 
 function Dashboard() {
+  const { patients } = usePatients();
+
+  const metrics = [
+    { 
+      label: "Active Patients", 
+      value: "248", 
+      change: "+12", 
+      icon: Users, 
+      tone: "primary" 
+    },
+    { 
+      label: "Critical Alerts", 
+      value: patients.reduce((acc, p) => acc + p.alerts, 0).toString(), 
+      change: "-3 today", 
+      icon: ShieldAlert, 
+      tone: "critical" 
+    },
+    { 
+      label: "AI Reviews Today", 
+      value: "1,284", 
+      change: "98.7% accuracy", 
+      icon: Brain, 
+      tone: "success" 
+    },
+    { 
+      label: "Avg. Review Time", 
+      value: "2.3m", 
+      change: "-18% vs last week", 
+      icon: Activity, 
+      tone: "primary" 
+    },
+  ];
+
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
       {/* Header row */}
@@ -95,7 +115,7 @@ function Dashboard() {
           <div className="text-xs uppercase tracking-wider text-muted-foreground">Command center</div>
           <h1 className="text-2xl font-semibold mt-1">Good afternoon, Dr. Chen</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            7 critical alerts across 248 active patients · AI reviewed 1,284 orders today
+            {patients.reduce((acc, p) => acc + p.alerts, 0)} critical alerts across 248 active patients · AI reviewed 1,284 orders today
           </p>
         </div>
         <div className="flex gap-2">
@@ -110,18 +130,29 @@ function Dashboard() {
 
       {/* Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {metrics.map((m) => (
-          <div key={m.label} className="rounded-xl border border-border bg-card p-5">
-            <div className="flex items-start justify-between">
-              <div className={`size-10 rounded-lg flex items-center justify-center ${toneMap[m.tone]}`}>
-                <m.icon className="size-5" />
+        {metrics.map((m) => {
+          const isPatients = m.label === "Active Patients";
+          
+          return (
+            <Link 
+              key={m.label} 
+              to={isPatients ? "/patient" : "/"} 
+              className="rounded-xl border border-border bg-card p-5 hover:bg-accent/40 transition-colors group cursor-pointer"
+            >
+              <div className="flex items-start justify-between">
+                <div className={`size-10 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110 ${toneMap[m.tone]}`}>
+                  <m.icon className="size-5" />
+                </div>
+                <span className="text-xs text-muted-foreground">{m.change}</span>
               </div>
-              <span className="text-xs text-muted-foreground">{m.change}</span>
-            </div>
-            <div className="mt-4 text-3xl font-semibold tracking-tight">{m.value}</div>
-            <div className="mt-1 text-sm text-muted-foreground">{m.label}</div>
-          </div>
-        ))}
+              <div className="mt-4 text-3xl font-semibold tracking-tight">{m.value}</div>
+              <div className="mt-1 text-sm text-muted-foreground flex items-center gap-1">
+                {m.label}
+                <ArrowUpRight className="size-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            </Link>
+          );
+        })}
       </div>
 
       {/* Main grid */}
@@ -133,23 +164,23 @@ function Dashboard() {
               <h2 className="text-base font-semibold">Active Patient Cases</h2>
               <p className="text-xs text-muted-foreground mt-0.5">Sorted by risk · last 24 hours</p>
             </div>
-            <Link to="/patient" className="text-xs text-primary inline-flex items-center gap-1">
+            <Link to="/patient" className="text-xs text-primary inline-flex items-center gap-1 hover:underline">
               View all <ArrowUpRight className="size-3.5" />
             </Link>
           </div>
           <div className="divide-y divide-border">
-            {patients.map((p, index) => (
+            {patients.slice(0, 5).map((p, index) => (
               <Link
-                key={p.mrn}
+                key={p.id}
                 to="/patient/$patientId"
-                params={{ patientId: (index + 1).toString() }} // Using index+1 as mock ID for now
-                className="flex items-center gap-4 px-5 py-3.5 hover:bg-accent/40 transition"
+                params={{ patientId: p.id }} 
+                className="flex items-center gap-4 px-5 py-3.5 hover:bg-accent/40 transition group"
               >
-                <div className="size-9 rounded-full bg-accent flex items-center justify-center text-xs font-semibold text-primary">
+                <div className="size-9 rounded-full bg-accent flex items-center justify-center text-xs font-semibold text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
                   {p.name.split(" ").map((n) => n[0]).slice(0, 2).join("")}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{p.name}</div>
+                  <div className="text-sm font-medium truncate group-hover:text-primary transition-colors">{p.name}</div>
                   <div className="text-xs text-muted-foreground">
                     MRN {p.mrn} · {p.dept} · {p.age}
                   </div>
@@ -176,7 +207,7 @@ function Dashboard() {
         </div>
 
         {/* Critical Alerts */}
-        <div className="col-span-12 xl:col-span-5 rounded-xl border border-border bg-card">
+        <div className="col-span-12 xl:col-span-5 rounded-xl border border-border bg-card overflow-hidden">
           <div className="flex items-center justify-between p-5 border-b border-border">
             <div className="flex items-center gap-2">
               <ShieldAlert className="size-4 text-critical" />
@@ -185,44 +216,53 @@ function Dashboard() {
             <span className="text-xs text-muted-foreground">Live</span>
           </div>
           <div className="p-3 space-y-2">
-            {alerts.map((a, i) => (
-              <div
-                key={i}
-                className={`rounded-lg border p-3.5 ${
-                  a.severity === "critical"
-                    ? "border-critical-soft bg-critical-soft"
-                    : "border-warning-soft bg-warning-soft"
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className={`size-7 shrink-0 rounded-md flex items-center justify-center ${
-                      a.severity === "critical"
-                        ? "bg-critical text-critical-foreground"
-                        : "bg-warning text-warning-foreground"
-                    }`}
-                  >
-                    <AlertTriangle className="size-3.5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <span
-                        className={`text-[10px] font-bold uppercase tracking-wide ${
-                          a.severity === "critical" ? "text-critical" : "text-warning"
-                        }`}
-                      >
-                        {a.severity}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">{a.time}</span>
+            {alerts.map((a, i) => {
+              // Find patient ID based on name for navigation
+              const pIndex = patients.findIndex(p => p.name === a.patient);
+              const pId = (pIndex !== -1 ? pIndex + 1 : 1).toString();
+              
+              return (
+                <Link
+                  key={i}
+                  to="/patient/$patientId"
+                  params={{ patientId: pId }}
+                  search={{ tab: "alerts" }}
+                  className={`block rounded-lg border p-3.5 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer ${
+                    a.severity === "critical"
+                      ? "border-critical-soft bg-critical-soft hover:bg-critical/10"
+                      : "border-warning-soft bg-warning-soft hover:bg-warning/10"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`size-7 shrink-0 rounded-md flex items-center justify-center ${
+                        a.severity === "critical"
+                          ? "bg-critical text-critical-foreground"
+                          : "bg-warning text-warning-foreground"
+                      }`}
+                    >
+                      <AlertTriangle className="size-3.5" />
                     </div>
-                    <div className="text-sm font-medium mt-1">{a.title}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {a.patient} — {a.detail}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className={`text-[10px] font-bold uppercase tracking-wide ${
+                            a.severity === "critical" ? "text-critical" : "text-warning"
+                          }`}
+                        >
+                          {a.severity}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">{a.time}</span>
+                      </div>
+                      <div className="text-sm font-medium mt-1">{a.title}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {a.patient} — {a.detail}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         </div>
 

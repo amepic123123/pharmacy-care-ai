@@ -1,6 +1,6 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useState, useMemo } from "react";
-import { mockPatients } from "@/lib/mock-data";
+import { useState, useMemo, useEffect } from "react";
+import { usePatients } from "@/contexts/PatientContext";
 import {
   AlertTriangle,
   ChevronLeft,
@@ -81,6 +81,8 @@ function PatientPage() {
   const { patientId } = Route.useParams();
   const { tab } = Route.useSearch();
   const navigate = Route.useNavigate();
+  const { patients, resolveAlert, unresolveAlert } = usePatients();
+
   const setTab = (newTab: "alerts" | "metrics" | "history" | "log") => 
     navigate({ search: (prev) => ({ ...prev, tab: newTab }), replace: true });
   const [highlightMode, setHighlightMode] = useState(false);
@@ -99,8 +101,8 @@ function PatientPage() {
   const isHighlighted = (id: string) => highlights.has(id);
   
   const patient = useMemo(() => {
-    return mockPatients.find(p => p.id === patientId) || mockPatients[0];
-  }, [patientId]);
+    return patients.find(p => p.id === patientId) || patients[0];
+  }, [patients, patientId]);
 
   return (
     <div className="p-5 space-y-4 max-w-[1700px] mx-auto">
@@ -399,7 +401,13 @@ function PatientPage() {
             {tab === "alerts" && (
               <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
                 {drugAlerts.map((a, i) => (
-                  <DrugAlertCard key={i} alert={a} />
+                  <DrugAlertCard 
+                    key={i} 
+                    alert={a} 
+                    patientId={patient.id} 
+                    onResolve={() => resolveAlert(patient.id)}
+                    onUnresolve={() => unresolveAlert(patient.id)}
+                  />
                 ))}
               </div>
             )}
@@ -482,22 +490,61 @@ function PatientPage() {
   );
 }
 
-function DrugAlertCard({ alert: a }: { alert: typeof drugAlerts[number] }) {
+function DrugAlertCard({ 
+  alert: a, 
+  onResolve, 
+  onUnresolve 
+}: { 
+  alert: typeof drugAlerts[number], 
+  patientId: string,
+  onResolve: () => void,
+  onUnresolve: () => void
+}) {
   const [open, setOpen] = useState(a.open);
+  const [isResolved, setIsResolved] = useState(false);
   const isCritical = a.severity === "critical";
+
+  const handleResolve = () => {
+    setIsResolved(true);
+    onResolve();
+  };
+
+  const handleUnresolve = () => {
+    setIsResolved(false);
+    onUnresolve();
+  };
+
+  if (isResolved) {
+    return (
+      <div className="rounded-xl border border-border bg-muted/30 p-3 flex items-center justify-between animate-in zoom-in-95 duration-300">
+        <div className="flex items-center gap-3">
+          <div className="size-6 rounded-full bg-success/20 flex items-center justify-center text-success">
+            <CheckCircle2 className="size-4" />
+          </div>
+          <div className="text-sm font-medium text-muted-foreground line-through decoration-muted-foreground/50">{a.title}</div>
+        </div>
+        <button 
+          onClick={handleUnresolve}
+          className="text-[10px] font-bold text-primary hover:underline"
+        >
+          Undo
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
-      className={`rounded-xl border-2 ${
+      className={`rounded-xl border-2 transition-all duration-300 ${
         isCritical ? "border-critical/60 bg-critical-soft" : "border-warning/50 bg-warning-soft"
-      } overflow-hidden`}
+      } overflow-hidden shadow-sm`}
     >
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-start gap-3 p-4 text-left"
+        className="w-full flex items-start gap-3 p-4 text-left group"
       >
         <div
-          className={`size-7 shrink-0 rounded-md flex items-center justify-center ${
+          className={`size-7 shrink-0 rounded-md flex items-center justify-center transition-transform group-hover:scale-110 ${
             isCritical ? "bg-critical text-critical-foreground" : "bg-warning text-warning-foreground"
           }`}
         >
@@ -520,41 +567,47 @@ function DrugAlertCard({ alert: a }: { alert: typeof drugAlerts[number] }) {
               </span>
             )}
           </div>
-          <div className="text-sm font-semibold mt-1.5">{a.title}</div>
+          <div className="text-sm font-semibold mt-1.5 group-hover:text-primary transition-colors">{a.title}</div>
           <div className="flex flex-wrap gap-1.5 mt-2">
             {a.drugs.map((d) => (
               <span
                 key={d}
-                className="text-[11px] px-2 py-0.5 rounded-md bg-surface-elevated/80 border border-border text-foreground/90 inline-flex items-center gap-1"
+                className="text-[11px] px-2 py-0.5 rounded-md bg-surface-elevated/80 border border-border text-foreground/90 inline-flex items-center gap-1 shadow-sm"
               >
                 <Pill className="size-3" /> {d}
               </span>
             ))}
           </div>
         </div>
-        <ChevronDown className={`size-4 text-muted-foreground transition ${open ? "rotate-180" : ""}`} />
+        <ChevronDown className={`size-4 text-muted-foreground transition-transform duration-300 ${open ? "rotate-180" : ""}`} />
       </button>
 
       {open && (
-        <div className="px-4 pb-4 space-y-3">
+        <div className="px-4 pb-4 space-y-3 animate-in fade-in slide-in-from-top-1">
           <div>
             <div className="text-xs text-muted-foreground mb-1">Why this matters</div>
             <p className="text-sm text-foreground/90 leading-relaxed">{a.why}</p>
           </div>
 
-          <div className="rounded-lg border border-info/30 bg-info-soft p-3">
-            <div className="text-[10px] uppercase tracking-wider text-info font-bold mb-1">
-              AI Recommendation
+          <div className="rounded-lg border border-info/30 bg-info-soft p-3 shadow-inner">
+            <div className="text-[10px] uppercase tracking-wider text-info font-bold mb-1 flex items-center gap-1.5">
+              <Sparkles className="size-3" /> AI Recommendation
             </div>
             <p className="text-sm text-foreground/90 leading-snug">{a.rec}</p>
           </div>
 
           {isCritical && (
-            <div className="grid grid-cols-2 gap-2">
-              <button className="rounded-lg border border-border bg-surface-elevated text-sm font-medium py-2.5 hover:bg-accent transition">
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button 
+                onClick={handleResolve}
+                className="rounded-lg border border-border bg-surface-elevated text-sm font-medium py-2.5 hover:bg-accent transition active:scale-95"
+              >
                 Defer
               </button>
-              <button className="rounded-lg bg-critical text-critical-foreground text-sm font-semibold py-2.5 inline-flex items-center justify-center gap-2 hover:opacity-90 transition">
+              <button 
+                onClick={handleResolve}
+                className="rounded-lg bg-critical text-critical-foreground text-sm font-semibold py-2.5 inline-flex items-center justify-center gap-2 hover:opacity-90 transition shadow-glow active:scale-95"
+              >
                 <Lock className="size-3.5" /> Sign & Override Warning
               </button>
             </div>

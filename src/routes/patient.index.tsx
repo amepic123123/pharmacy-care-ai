@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
-import { mockPatients } from "@/lib/mock-data";
+import { usePatients } from "@/contexts/PatientContext";
 import { 
   Search, 
   Filter, 
@@ -17,21 +17,22 @@ export const Route = createFileRoute("/patient/")({
 });
 
 function PatientsListPage() {
+  const { patients } = usePatients();
   const [search, setSearch] = useState("");
   const [riskFilter, setRiskFilter] = useState<string | null>(null);
 
   const filteredPatients = useMemo(() => {
-    return mockPatients.filter(p => {
+    return patients.filter(p => {
       const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || 
                             p.mrn.includes(search) || 
                             p.dept.toLowerCase().includes(search.toLowerCase());
       const matchesRisk = riskFilter ? p.risk === riskFilter : true;
       return matchesSearch && matchesRisk;
     });
-  }, [search, riskFilter]);
+  }, [patients, search, riskFilter]);
 
-  const highRiskCount = useMemo(() => mockPatients.filter(p => p.risk === "HIGH").length, []);
-  const criticalAlertsCount = useMemo(() => mockPatients.reduce((acc, p) => acc + p.alerts, 0), []);
+  const highRiskCount = useMemo(() => patients.filter(p => p.risk === "HIGH").length, [patients]);
+  const criticalAlertsCount = useMemo(() => patients.reduce((acc, p) => acc + p.alerts, 0), [patients]);
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-in fade-in duration-500">
