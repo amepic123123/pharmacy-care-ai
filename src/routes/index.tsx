@@ -138,10 +138,11 @@ function Dashboard() {
             </Link>
           </div>
           <div className="divide-y divide-border">
-            {patients.map((p) => (
+            {patients.map((p, index) => (
               <Link
                 key={p.mrn}
-                to="/patient"
+                to="/patient/$patientId"
+                params={{ patientId: (index + 1).toString() }} // Using index+1 as mock ID for now
                 className="flex items-center gap-4 px-5 py-3.5 hover:bg-accent/40 transition"
               >
                 <div className="size-9 rounded-full bg-accent flex items-center justify-center text-xs font-semibold text-primary">

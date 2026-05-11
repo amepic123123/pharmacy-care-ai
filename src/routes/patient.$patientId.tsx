@@ -1,5 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { useState, useMemo } from "react";
+import { mockPatients } from "@/lib/mock-data";
 import {
   AlertTriangle,
   ChevronLeft,
@@ -17,9 +18,13 @@ import {
   TrendingUp,
   Pill,
   CheckCircle2,
+  ArrowLeft,
 } from "lucide-react";
 
-export const Route = createFileRoute("/patient")({
+export const Route = createFileRoute("/patient/$patientId")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    tab: (search.tab as string) || "alerts",
+  }),
   component: PatientPage,
 });
 
@@ -73,40 +78,73 @@ const drugAlerts = [
 ];
 
 function PatientPage() {
-  const [tab, setTab] = useState<"alerts" | "metrics" | "history" | "log">("alerts");
+  const { patientId } = Route.useParams();
+  const { tab } = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const setTab = (newTab: "alerts" | "metrics" | "history" | "log") => 
+    navigate({ search: (prev) => ({ ...prev, tab: newTab }), replace: true });
+  const [highlightMode, setHighlightMode] = useState(false);
+  const [highlights, setHighlights] = useState<Set<string>>(new Set());
+
+  const toggleHighlight = (id: string) => {
+    if (!highlightMode) return;
+    setHighlights((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const isHighlighted = (id: string) => highlights.has(id);
+  
+  const patient = useMemo(() => {
+    return mockPatients.find(p => p.id === patientId) || mockPatients[0];
+  }, [patientId]);
 
   return (
     <div className="p-5 space-y-4 max-w-[1700px] mx-auto">
+      {/* Breadcrumb / Back */}
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+        <button onClick={() => window.history.back()} className="hover:text-primary flex items-center gap-1 transition">
+          <ArrowLeft className="size-3" /> Patients
+        </button>
+        <ChevronRight className="size-3" />
+        <span className="text-foreground/70 font-medium">{patient.name}</span>
+      </div>
+
       {/* Patient summary header */}
-      <section className="rounded-xl border border-border bg-card p-5">
+      <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
         <div className="grid grid-cols-12 gap-5">
           {/* Avatar + name */}
           <div className="col-span-12 lg:col-span-4 flex gap-4 items-start">
-            <div className="size-20 rounded-xl bg-gradient-to-br from-accent to-surface-elevated flex items-center justify-center text-xl font-semibold text-primary shrink-0">
-              MC
+            <div className="size-20 rounded-xl bg-gradient-to-br from-accent to-surface-elevated flex items-center justify-center text-xl font-semibold text-primary shrink-0 shadow-inner">
+              {patient.name.split(" ").map(n => n[0]).slice(0, 2).join("")}
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-semibold">Margaret R. Collins</h1>
-                <span className="text-xs px-1.5 py-0.5 rounded bg-accent text-primary">♀</span>
+                <h1 className="text-xl font-semibold">{patient.name}</h1>
+                <span className="text-xs px-1.5 py-0.5 rounded bg-accent text-primary">
+                  {patient.gender === "Female" ? "♀" : "♂"}
+                </span>
               </div>
-              <div className="text-xs text-muted-foreground mt-0.5">78Y · Female</div>
+              <div className="text-xs text-muted-foreground mt-0.5">{patient.age} · {patient.gender}</div>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-3 text-xs">
                 <div>
                   <dt className="text-muted-foreground">MRN</dt>
-                  <dd className="font-medium text-foreground">847201</dd>
+                  <dd className="font-medium text-foreground">{patient.mrn}</dd>
                 </div>
                 <div>
                   <dt className="text-muted-foreground">Phone</dt>
-                  <dd className="font-medium text-foreground">+1 (555) 231-9876</dd>
+                  <dd className="font-medium text-foreground">{patient.phone}</dd>
                 </div>
                 <div>
                   <dt className="text-muted-foreground">Blood Type</dt>
-                  <dd className="font-medium text-foreground">O+</dd>
+                  <dd className="font-medium text-foreground">{patient.bloodType}</dd>
                 </div>
                 <div>
                   <dt className="text-muted-foreground">Weight / Height</dt>
-                  <dd className="font-medium text-foreground">62 kg / 158 cm</dd>
+                  <dd className="font-medium text-foreground">{patient.weight} / {patient.height}</dd>
                 </div>
               </dl>
             </div>
@@ -118,19 +156,18 @@ function PatientPage() {
               <div className="flex items-center gap-2 text-muted-foreground mb-1.5">
                 <CheckCircle2 className="size-3.5 text-success" /> Primary Diagnosis
               </div>
-              <div className="text-sm font-medium">Chronic Kidney Disease (CKD Stage 4)</div>
+              <div className="text-sm font-medium">{patient.diagnosis}</div>
             </div>
             <div>
               <div className="flex items-center gap-2 text-critical mb-1.5">
                 <AlertTriangle className="size-3.5" /> Allergies
               </div>
               <div className="flex gap-1.5 flex-wrap">
-                <span className="px-2 py-1 rounded-md bg-critical-soft text-critical text-xs font-medium border border-critical-soft">
-                  Penicillin (Rash)
-                </span>
-                <span className="px-2 py-1 rounded-md bg-surface-elevated text-muted-foreground text-xs">
-                  +1
-                </span>
+                {patient.allergies.map(a => (
+                  <span key={a} className="px-2 py-1 rounded-md bg-critical-soft text-critical text-xs font-medium border border-critical-soft">
+                    {a}
+                  </span>
+                ))}
               </div>
             </div>
           </div>
@@ -142,7 +179,7 @@ function PatientPage() {
                 <CheckCircle2 className="size-3.5 text-success" /> Chronic Conditions
               </div>
               <div className="flex gap-1.5 flex-wrap">
-                {["Diabetes Mellitus", "Hypertension", "Anemia"].map((c) => (
+                {patient.conditions.map((c) => (
                   <span
                     key={c}
                     className="px-2 py-1 rounded-md bg-accent/60 text-foreground text-xs font-medium"
@@ -154,10 +191,10 @@ function PatientPage() {
             </div>
             <div>
               <div className="flex items-center gap-2 text-muted-foreground mb-1.5">
-                <Pill className="size-3.5 text-primary" /> Current Medications (5)
+                <Pill className="size-3.5 text-primary" /> Current Medications ({patient.medications.length})
               </div>
               <div className="text-sm text-foreground/90 leading-relaxed">
-                Warfarin, Metformin, Lisinopril, Furosemide, Atorvastatin
+                {patient.medications.join(", ")}
               </div>
             </div>
           </div>
@@ -165,11 +202,14 @@ function PatientPage() {
           {/* Risk */}
           <div className="col-span-12 lg:col-span-2 text-xs">
             <div className="text-muted-foreground mb-1.5">Risk Status</div>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-critical text-critical-foreground text-xs font-bold">
-              HIGH RISK
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold ${
+              patient.risk === "HIGH" ? "bg-critical text-critical-foreground" : 
+              patient.risk === "MED" ? "bg-warning text-warning-foreground" : "bg-success text-success-foreground"
+            }`}>
+              {patient.risk} RISK
             </span>
             <div className="mt-4 text-muted-foreground">Last Visit</div>
-            <div className="text-sm font-medium mt-1">08 May 2026</div>
+            <div className="text-sm font-medium mt-1">{patient.lastVisit}</div>
           </div>
         </div>
       </section>
@@ -204,6 +244,14 @@ function PatientPage() {
           <div className="mx-4 mt-3 flex items-center gap-2 border border-border rounded-lg px-3 py-1.5 bg-surface-elevated">
             <button className="p-1 hover:text-primary"><Maximize2 className="size-3.5" /></button>
             <button className="p-1 hover:text-primary"><Search className="size-3.5" /></button>
+            <button 
+              onClick={() => setHighlightMode(!highlightMode)}
+              className={`flex items-center gap-2 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition ${
+                highlightMode ? "bg-primary text-primary-foreground shadow-glow" : "bg-surface border border-border text-muted-foreground hover:bg-accent"
+              }`}
+            >
+              <Sparkles className="size-3" /> {highlightMode ? "Highlighter ON" : "Highlighter"}
+            </button>
             <div className="ml-auto flex items-center gap-2 text-xs">
               <button className="p-1"><Minus className="size-3.5" /></button>
               <span>100%</span>
@@ -213,7 +261,7 @@ function PatientPage() {
           </div>
 
           {/* Document mock */}
-          <div className="m-4 rounded-lg bg-[oklch(0.96_0.005_250)] text-[oklch(0.18_0.015_250)] p-6 font-serif text-sm leading-relaxed shadow-elevated">
+          <div className={`m-4 rounded-lg bg-[oklch(0.96_0.005_250)] text-[oklch(0.18_0.015_250)] p-6 font-serif text-sm leading-relaxed shadow-elevated transition-all ${highlightMode ? "cursor-crosshair ring-2 ring-primary/20" : ""}`}>
             <div className="flex justify-between items-start border-b border-border pb-3 mb-4">
               <h3 className="text-lg font-bold tracking-wide">ADMISSION NOTE</h3>
               <div className="text-xs text-right space-y-0.5">
@@ -222,20 +270,36 @@ function PatientPage() {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-y-1 text-xs mb-4">
-              <div><span className="font-semibold">Patient Name:</span> Margaret R. Collins</div>
-              <div><span className="font-semibold">DOB:</span> 03/12/1948</div>
-              <div><span className="font-semibold">Department:</span> Nephrology</div>
-              <div><span className="font-semibold">MRN:</span> 847201</div>
+              <div onClick={() => toggleHighlight("name")} className={isHighlighted("name") ? "bg-yellow-200/80 rounded px-1" : ""}>
+                <span className="font-semibold">Patient Name:</span> {patient.name}
+              </div>
+              <div onClick={() => toggleHighlight("dob")} className={isHighlighted("dob") ? "bg-yellow-200/80 rounded px-1" : ""}>
+                <span className="font-semibold">DOB:</span> {patient.dob}
+              </div>
+              <div onClick={() => toggleHighlight("dept")} className={isHighlighted("dept") ? "bg-yellow-200/80 rounded px-1" : ""}>
+                <span className="font-semibold">Department:</span> {patient.dept}
+              </div>
+              <div onClick={() => toggleHighlight("mrn")} className={isHighlighted("mrn") ? "bg-yellow-200/80 rounded px-1" : ""}>
+                <span className="font-semibold">MRN:</span> {patient.mrn}
+              </div>
             </div>
 
             <div className="mb-3">
               <div className="font-semibold text-sm">Chief Complaint:</div>
-              <div className="italic mt-1">Pt. c/o increased fatigue and decreased urine output.</div>
+              <div 
+                onClick={() => toggleHighlight("complaint")}
+                className={`italic mt-1 px-1 rounded transition-colors ${isHighlighted("complaint") ? "bg-yellow-200/80" : ""}`}
+              >
+                Pt. c/o increased fatigue and decreased urine output.
+              </div>
             </div>
 
             <div className="mb-3">
               <div className="font-semibold text-sm">Vital Signs:</div>
-              <div className="text-xs mt-1">
+              <div 
+                onClick={() => toggleHighlight("vitals")}
+                className={`text-xs mt-1 px-1 rounded transition-colors ${isHighlighted("vitals") ? "bg-yellow-200/80" : ""}`}
+              >
                 BP: 138/82 mmHg · HR: 88 bpm · RR: 18/min · Temp: 98.4 °F · SpO₂: 97% (RA)
               </div>
             </div>
@@ -251,7 +315,11 @@ function PatientPage() {
                   ["AST", "118 U/L", "H", "text-amber-600"],
                   ["Total Bilirubin", "1.1 mg/dL", "N", "text-emerald-600"],
                 ].map(([n, v, f, c]) => (
-                  <tr key={n} className="border-t border-[oklch(0.85_0.01_250)]">
+                  <tr 
+                    key={n} 
+                    onClick={() => toggleHighlight(`lab-${n}`)}
+                    className={`border-t border-[oklch(0.85_0.01_250)] transition-colors ${isHighlighted(`lab-${n}`) ? "bg-yellow-200/60" : ""}`}
+                  >
                     <td className="px-2 py-1 font-medium">{n}</td>
                     <td className={`px-2 py-1 ${c}`}>{v}</td>
                     <td className={`px-2 py-1 font-bold ${c}`}>{f}</td>
@@ -260,7 +328,10 @@ function PatientPage() {
               </tbody>
             </table>
 
-            <div className="mt-4 rounded-md border-2 border-dashed border-amber-400 bg-amber-100/60 p-3 italic text-[13px] leading-snug">
+            <div 
+              onClick={() => toggleHighlight("note")}
+              className={`mt-4 rounded-md border-2 border-dashed border-amber-400 bg-amber-100/60 p-3 italic text-[13px] leading-snug transition-colors ${isHighlighted("note") ? "ring-4 ring-yellow-300" : ""}`}
+            >
               Dr. Chen — Pt. c/o increased fatigue + SOB. Hold nephrotoxic agents. Renal consult ordered.
             </div>
           </div>
@@ -323,35 +394,87 @@ function PatientPage() {
             ))}
           </div>
 
-          {/* Lab values */}
-          <div className="rounded-xl border border-border bg-card p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-                Extracted Lab Values
+          {/* Tab Content */}
+          <div className="space-y-3 min-h-[400px]">
+            {tab === "alerts" && (
+              <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
+                {drugAlerts.map((a, i) => (
+                  <DrugAlertCard key={i} alert={a} />
+                ))}
               </div>
-              <button className="text-xs text-primary inline-flex items-center gap-1">
-                <TrendingUp className="size-3.5" /> View Trend
-              </button>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              {labs.map((l) => (
-                <div key={l.name} className="rounded-lg border border-border bg-surface p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground truncate">{l.name}</span>
-                    <span className={`size-2 rounded-full ${toneDot[l.tone]}`} />
-                  </div>
-                  <div className={`mt-1.5 text-2xl font-semibold ${toneText[l.tone]}`}>{l.value}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">{l.unit}</div>
-                </div>
-              ))}
-            </div>
-          </div>
+            )}
 
-          {/* Drug alerts */}
-          <div className="space-y-3">
-            {drugAlerts.map((a, i) => (
-              <DrugAlertCard key={i} alert={a} />
-            ))}
+            {tab === "metrics" && (
+              <div className="grid grid-cols-1 gap-3 animate-in fade-in slide-in-from-right-4">
+                <div className="rounded-xl border border-border bg-card p-5">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold">Kidney Function Trend</h3>
+                    <TrendingUp className="size-4 text-critical" />
+                  </div>
+                  <div className="h-48 bg-muted/20 rounded flex items-end justify-between p-4 gap-2">
+                    {[35, 32, 28, 26, 28].map((v, i) => (
+                      <div key={i} className="flex-1 bg-primary/20 rounded-t relative group" style={{ height: `${v * 2}px` }}>
+                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[10px] font-bold opacity-0 group-hover:opacity-100 transition">{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-between text-[10px] text-muted-foreground mt-2">
+                    <span>May 06</span>
+                    <span>May 07</span>
+                    <span>May 08</span>
+                    <span>May 09</span>
+                    <span>Today</span>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-border bg-card p-5">
+                  <h3 className="text-sm font-semibold mb-4">Vitals Summary</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 bg-surface rounded-lg border border-border">
+                      <div className="text-[10px] text-muted-foreground uppercase">Blood Pressure</div>
+                      <div className="text-lg font-bold">138/82</div>
+                    </div>
+                    <div className="p-3 bg-surface rounded-lg border border-border">
+                      <div className="text-[10px] text-muted-foreground uppercase">Heart Rate</div>
+                      <div className="text-lg font-bold">88 <span className="text-xs font-normal">bpm</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {tab === "history" && (
+              <div className="space-y-3 animate-in fade-in slide-in-from-right-4">
+                {patient.medications.map((med, idx) => (
+                  <div key={med} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:bg-accent/30 transition">
+                    <div className="size-9 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                      <Pill className="size-4" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-sm font-medium">{med}</div>
+                      <div className="text-[10px] text-muted-foreground">Active Medication · Patient Registry {patient.id}</div>
+                    </div>
+                    <button className="text-[10px] font-bold text-primary hover:underline">Details</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {tab === "log" && (
+              <div className="space-y-4 p-2 animate-in fade-in slide-in-from-right-4">
+                {[
+                  { date: patient.lastVisit, event: "Last Clinical Encounter", detail: `Follow-up visit regarding ${patient.diagnosis}.` },
+                  { date: "12 Apr 2026", event: "Routine Review", detail: "General health screening and medication reconciliation." },
+                  { date: "05 Jan 2026", event: "Historical Entry", detail: "Initial baseline assessment performed." },
+                ].map((item, i) => (
+                  <div key={i} className="relative pl-6 border-l-2 border-border">
+                    <div className="absolute left-[-5px] top-1.5 size-2 rounded-full bg-primary" />
+                    <div className="text-[10px] text-muted-foreground font-bold uppercase">{item.date}</div>
+                    <div className="text-sm font-semibold mt-0.5">{item.event}</div>
+                    <div className="text-xs text-muted-foreground mt-1 leading-relaxed">{item.detail}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </section>
       </div>
