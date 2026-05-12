@@ -159,7 +159,8 @@
     border-color: var(--color-border);
   }
 
-  html, body {
+  html,
+  body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
@@ -171,21 +172,27 @@
   .bg-critical-soft {
     background-color: color-mix(in oklab, var(--critical) 12%, transparent);
   }
+
   .bg-warning-soft {
     background-color: color-mix(in oklab, var(--warning) 12%, transparent);
   }
+
   .bg-success-soft {
     background-color: color-mix(in oklab, var(--success) 14%, transparent);
   }
+
   .bg-info-soft {
     background-color: color-mix(in oklab, var(--info) 12%, transparent);
   }
+
   .border-critical-soft {
     border-color: color-mix(in oklab, var(--critical) 40%, transparent);
   }
+
   .border-warning-soft {
     border-color: color-mix(in oklab, var(--warning) 40%, transparent);
   }
+
   .ring-glow {
     box-shadow: var(--shadow-glow);
   }
